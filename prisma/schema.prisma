@@ -1,0 +1,259 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum TransportType {
+  HTTP
+  WS
+}
+
+enum TransactionType {
+  DEBIT
+  CREDIT
+  BONUS
+  REFUND
+  ADMIN_GRANT
+}
+
+enum ProviderType {
+  OPENAI
+  OPENROUTER
+  ANTHROPIC
+  GEMINI
+}
+
+enum ImageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  role         UserRole      @default(USER)
+  isBanned     Boolean       @default(false)
+  banReason    String?
+  tokenBalance BigInt        @default(0)
+  bonusTokens  BigInt        @default(0)
+  language     String        @default("ru")
+  theme        String        @default("light")
+  telegramId   String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
+  sessions     Session[]
+  apiKeys      ApiKey[]
+  requestLogs  RequestLog[]
+  transactions Transaction[]
+  imageChats   ImageChat[]
+  adminLogs    AdminLog[]    @relation("AdminActionLogs")
+  settings     Settings?
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  refreshTokenHash String
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model ApiKey {
+  id                 String       @id @default(cuid())
+  userId             String
+  name               String
+  prefix             String
+  keyHash            String       @unique
+  last4              String
+  status             ApiKeyStatus @default(ACTIVE)
+  allowedIps         Json?
+  maxRequestsPerDay  Int?
+  maxTokensPerDay    Int?
+  expiresAt          DateTime?
+  revokedAt          DateTime?
+  lastUsedAt         DateTime?
+  totalRequests      Int          @default(0)
+  totalTokens        BigInt       @default(0)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestLogs        RequestLog[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model RequestLog {
+  id               String         @id @default(cuid())
+  requestId        String         @unique
+  userId           String?
+  apiKeyId         String?
+  endpoint         String
+  modelAlias       String
+  provider         ProviderType?
+  providerModel    String?
+  transport        TransportType  @default(HTTP)
+  statusCode       Int
+  success          Boolean        @default(false)
+  promptTokens     Int            @default(0)
+  completionTokens Int            @default(0)
+  totalTokens      Int            @default(0)
+  latencyMs        Int
+  errorMessage     String?
+  billedTokens     BigInt         @default(0)
+  ipAddress        String?
+  userAgent        String?
+  rawRequest       Json?
+  rawResponse      Json?
+  createdAt        DateTime       @default(now())
+
+  user             User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  apiKey           ApiKey?        @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  transaction      Transaction?
+
+  @@index([userId])
+  @@index([apiKeyId])
+  @@index([createdAt])
+  @@index([endpoint])
+}
+
+model Transaction {
+  id            String          @id @default(cuid())
+  userId        String
+  type          TransactionType
+  amount        BigInt
+  balanceBefore BigInt
+  balanceAfter  BigInt
+  reason        String
+  requestLogId  String?         @unique
+  metadata      Json?
+  createdAt     DateTime        @default(now())
+
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestLog    RequestLog?     @relation(fields: [requestLogId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Provider {
+  id         String       @id @default(cuid())
+  type       ProviderType @unique
+  name       String
+  baseUrl    String
+  enabled    Boolean      @default(true)
+  priority   Int          @default(100)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  modelConfigs ModelConfig[]
+
+  @@index([enabled])
+}
+
+model ModelConfig {
+  id              String       @id @default(cuid())
+  alias           String       @unique
+  provider        ProviderType
+  providerModelId String
+  priceMultiplier Decimal      @db.Decimal(10, 4)
+  enabled         Boolean      @default(true)
+  maxTokens       Int          @default(8192)
+  priority        Int          @default(100)
+  supportsImages  Boolean      @default(false)
+  supportsEmbeds  Boolean      @default(false)
+  supportsChat    Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  providerRef     Provider     @relation(fields: [provider], references: [type], onDelete: Restrict)
+
+  @@index([enabled])
+  @@index([provider])
+}
+
+model ImageChat {
+  id          String         @id @default(cuid())
+  userId      String
+  title       String
+  expiresAt   DateTime
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    ImageMessage[]
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model ImageMessage {
+  id           String      @id @default(cuid())
+  chatId        String
+  role          ImageRole
+  prompt        String?
+  imageUrl      String?
+  tokensCharged Int        @default(0)
+  createdAt     DateTime   @default(now())
+
+  chat          ImageChat  @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+}
+
+model AdminLog {
+  id          String    @id @default(cuid())
+  adminUserId String
+  action      String
+  targetType  String
+  targetId    String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+
+  adminUser   User      @relation("AdminActionLogs", fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([createdAt])
+}
+
+model Settings {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  language       String   @default("ru")
+  theme          String   @default("light")
+  telegramHandle String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
