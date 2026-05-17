@@ -16,7 +16,7 @@ Production-ready AI API proxy platform (Next.js 15 + PostgreSQL + Prisma + Redis
 - Backend: Next.js Route Handlers, Prisma ORM, JWT, bcrypt
 - DB: PostgreSQL in production, automatic SQLite dev DB locally
 - Cache/Limits: Redis in production, in-memory fallback locally
-- Deploy: Docker, docker-compose, amvera.yml
+- Deploy: Docker, docker-compose
 
 ## 2. Quick start (local)
 
@@ -50,7 +50,7 @@ Local development can run with defaults. For real AI proxy calls, fill at least 
 - `ANTHROPIC_API_KEY`
 - `GEMINI_API_KEY`
 
-Production / Amvera required:
+Production required:
 
 - `DATABASE_URL`
 - `JWT_ACCESS_SECRET`
@@ -192,27 +192,7 @@ Script behavior:
 - can run local bridge mode (`-UseBridge`)
 - sets user env vars for AuraAI/OpenAI-compatible usage
 
-## 10. Deploy to Amvera
-
-### Option A: Dockerfile only
-
-Amvera will detect `Dockerfile` automatically.
-
-### Option B: with config file
-
-`amvera.yml` is included and sets container port to `3000`.
-
-### Typical deploy steps
-
-1. Push repository to Amvera Git remote.
-2. Set all env variables in Amvera panel.
-3. Build and deploy.
-4. Verify:
-   - `/api/health`
-   - `/v1/models`
-   - `/icw`
-
-## 11. Deploy with docker-compose (self-host)
+## 10. Deploy with docker-compose (self-host)
 
 ```bash
 docker compose up -d --build
@@ -221,7 +201,7 @@ docker compose up -d --build
 The container startup command runs `prisma migrate deploy` and the idempotent seed before `node server.js`.
 Seed creates missing providers/model aliases and creates the admin account only if it does not exist.
 
-## 12. Project structure
+## 11. Project structure
 
 ```text
 src/
@@ -244,12 +224,10 @@ prisma/
 server.js
 Dockerfile
 docker-compose.yml
-amvera.yml
 .env.example
 ```
 
-## 13. Notes
+## 12. Notes
 
 - `docker-compose.yml` is for local/self-host only.
-- Amvera cloud runtime uses `Dockerfile` / `amvera.yml`.
 - For stable billing accuracy keep upstream models with usage support enabled.
